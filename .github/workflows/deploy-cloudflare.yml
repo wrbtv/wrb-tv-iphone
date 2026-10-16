@@ -2,6 +2,17 @@ name: Deploy WRB-TV iPhone to Cloudflare Workers
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'wrangler.jsonc'
+      - 'src/**'
+      - 'app/**'
+      - 'netlify/functions/api.mjs'
+      - 'public/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - '.github/workflows/deploy-cloudflare.yml'
 
 permissions:
   contents: read
