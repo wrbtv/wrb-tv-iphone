@@ -1,4 +1,4 @@
-const CACHE_NAME = "wrbtv-iphone-shell-v1";
+const CACHE_NAME = "wrbtv-iphone-shell-v2-gateway-fullscreen";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.png"];
 
 self.addEventListener("install", (event) => {
