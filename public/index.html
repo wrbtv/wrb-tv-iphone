@@ -6133,8 +6133,6 @@
         hideControlsTimer = setTimeout(() => {
           // Keep controls visible while the user is keyboard-focused on them,
           // and while the instructional sheet is open.
-          if (hint && !hint.hidden) return;
-          if (document.activeElement?.matches?.('.wrbtv-screen-mode-button, .wrbtv-screen-mode-app')) return;
           document.body.classList.remove('wrbtv-screen-controls-visible');
         }, CONTROL_IDLE_MS);
       }
@@ -6204,6 +6202,10 @@
         revealControls();
         await toggleFullscreen();
         revealControls();
+        // Prevent the last focused/clicked button from staying visible forever.
+        setTimeout(() => {
+          if (document.activeElement === button) button.blur();
+        }, 120);
       }));
       hintOk?.addEventListener('click', () => {
         hint.hidden = true;
