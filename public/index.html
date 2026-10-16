@@ -3293,9 +3293,84 @@
     .episode-item { scroll-margin-block: 8px; }
 
     </style>
+
+  <style id="wrbtv-screen-mode-styles">
+    .wrbtv-screen-mode-button {
+      position: fixed;
+      z-index: 1200;
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      right: max(12px, env(safe-area-inset-right, 0px) + 12px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid rgba(0,210,255,.24);
+      border-radius: 999px;
+      color: #eaf8ff;
+      background: rgba(7,15,25,.90);
+      box-shadow: 0 8px 26px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.04);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      font: 700 12px/1 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      cursor: pointer;
+    }
+    .wrbtv-screen-mode-button svg,
+    .wrbtv-screen-mode-app svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .wrbtv-screen-mode-app { display: inline-flex; align-items: center; justify-content:center; }
+    body.login-mode .wrbtv-screen-mode-app { display: none !important; }
+    body:not(.login-mode) #wrbtvFullscreenLogin { display: none !important; }
+    .wrbtv-screen-mode-button:focus-visible,
+    .wrbtv-screen-mode-app:focus-visible,
+    .wrbtv-screen-mode-hint button:focus-visible { outline: 2px solid #00d2ff; outline-offset: 3px; }
+    .wrbtv-screen-mode-hint {
+      position: fixed;
+      z-index: 1300;
+      left: max(16px, env(safe-area-inset-left, 0px) + 16px);
+      right: max(16px, env(safe-area-inset-right, 0px) + 16px);
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+      max-width: 540px;
+      margin: 0 auto;
+      padding: 18px;
+      border: 1px solid rgba(0,210,255,.25);
+      border-radius: 18px;
+      color: #edf6ff;
+      background: rgba(7,13,22,.97);
+      box-shadow: 0 18px 52px rgba(0,0,0,.55);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .wrbtv-screen-mode-hint[hidden] { display: none !important; }
+    .wrbtv-screen-mode-hint strong { display:block; font-size:15px; font-weight:800; margin-bottom:8px; }
+    .wrbtv-screen-mode-hint p { color:#a9bacb; font-size:13px; line-height:1.55; margin:0 0 14px; }
+    .wrbtv-screen-mode-hint button {
+      min-height:40px; min-width:96px; padding:0 16px; border:0; border-radius:10px;
+      background:linear-gradient(120deg,#00cfff,#3983ff); color:#03121c; font-weight:800; cursor:pointer;
+    }
+    @media (max-width: 680px) {
+      .wrbtv-screen-mode-button { min-height:39px; padding:0 11px; font-size:11px; }
+      .wrbtv-screen-mode-hint { padding:16px; }
+    }
+    @media (display-mode: standalone) {
+      .wrbtv-screen-mode-button { top: calc(env(safe-area-inset-top, 0px) + 8px); }
+    }
+  </style>
+
 </head>
 <body class="login-mode">
   <div id="sessionRestoreSplash" aria-live="polite"><div class="session-restore-spinner" aria-hidden="true"></div><div class="session-restore-brand">WRB-TV</div><div class="session-restore-caption">Reconectando à sua conta...</div></div>
+
+  <button id="wrbtvFullscreenLogin" class="wrbtv-screen-mode-button" type="button" aria-label="Tela cheia" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    <span>Tela cheia</span>
+  </button>
+
+  <div id="wrbtvFullscreenHint" class="wrbtv-screen-mode-hint" role="status" aria-live="polite" hidden>
+    <strong id="wrbtvFullscreenHintTitle">Experiência em tela inteira</strong>
+    <p id="wrbtvFullscreenHintText"></p>
+    <button type="button" id="wrbtvFullscreenHintOk">Entendi</button>
+  </div>
 
   <!-- HEADER -->
   <header>
@@ -3337,6 +3412,9 @@
 
     <!-- USER & ACTIONS -->
     <div class="header-actions">
+      <button class="btn-icon wrbtv-screen-mode-app" id="wrbtvFullscreenApp" type="button" title="Tela cheia" aria-label="Tela cheia" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
       <div class="user-pill" id="userPill" style="display:none">
         <span class="status-dot"></span>
         <span id="userNameDisplay">Conectado</span>
@@ -6010,6 +6088,93 @@
         }
       } else document.documentElement.classList.remove('wrbtv-session-booting');
     });
+  </script>
+
+  <script>
+    // Full-screen support on browsers that expose the Fullscreen API.
+    // iPhone Safari hides its browser bars when this PWA is opened from the Home Screen.
+    (() => {
+      const buttons = [document.getElementById('wrbtvFullscreenLogin'), document.getElementById('wrbtvFullscreenApp')].filter(Boolean);
+      const hint = document.getElementById('wrbtvFullscreenHint');
+      const hintTitle = document.getElementById('wrbtvFullscreenHintTitle');
+      const hintText = document.getElementById('wrbtvFullscreenHintText');
+      const hintOk = document.getElementById('wrbtvFullscreenHintOk');
+      const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isStandalone = () => Boolean(
+        navigator.standalone ||
+        window.matchMedia?.('(display-mode: standalone)').matches ||
+        window.matchMedia?.('(display-mode: fullscreen)').matches
+      );
+
+      function showHint(title, message) {
+        if (!hint || !hintTitle || !hintText) return;
+        hintTitle.textContent = title;
+        hintText.textContent = message;
+        hint.hidden = false;
+      }
+
+      function syncButtons() {
+        const active = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+        for (const button of buttons) {
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+          const label = active ? 'Sair da tela cheia' : 'Tela cheia';
+          button.setAttribute('aria-label', label);
+          button.title = label;
+          const span = button.querySelector('span');
+          if (span) span.textContent = label;
+        }
+      }
+
+      async function toggleFullscreen() {
+        const current = document.fullscreenElement || document.webkitFullscreenElement;
+        if (current) {
+          const exit = document.exitFullscreen || document.webkitExitFullscreen;
+          if (exit) {
+            try { await exit.call(document); } catch (_) {}
+          }
+          syncButtons();
+          return;
+        }
+
+        const root = document.documentElement;
+        const request = root.requestFullscreen || root.webkitRequestFullscreen;
+        if (request) {
+          try {
+            await request.call(root, { navigationUI: 'hide' });
+            syncButtons();
+            return;
+          } catch (_) {
+            // iPhone Safari normally requires the installed standalone PWA
+            // to remove browser navigation controls.
+          }
+        }
+
+        if (isIOS && !isStandalone()) {
+          showHint(
+            'Abra a WRB-TV sem as barras do Safari',
+            'No iPhone, toque em Compartilhar no Safari e escolha Adicionar à Tela de Início. Depois, abra pelo ícone WRB-TV. O aplicativo já está configurado para abrir em modo independente, sem a barra de endereço e a barra inferior do navegador.'
+          );
+        } else if (isStandalone()) {
+          showHint(
+            'WRB-TV em modo aplicativo',
+            'A WRB-TV já está aberta como aplicativo independente. No iPhone, o modo de tela inicial é o que remove as barras de navegação do Safari.'
+          );
+        } else {
+          showHint(
+            'Tela cheia não disponível neste navegador',
+            'Este navegador não permitiu abrir a página em tela cheia. No computador, tente a tecla F11. No iPhone, adicione a WRB-TV à Tela de Início e abra pelo ícone.'
+          );
+        }
+      }
+
+      buttons.forEach(button => button.addEventListener('click', toggleFullscreen));
+      hintOk?.addEventListener('click', () => { hint.hidden = true; });
+      document.addEventListener('fullscreenchange', syncButtons);
+      document.addEventListener('webkitfullscreenchange', syncButtons);
+      window.addEventListener('pageshow', syncButtons);
+      syncButtons();
+    })();
   </script>
 
   <script>
