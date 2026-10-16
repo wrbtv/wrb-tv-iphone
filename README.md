@@ -6,7 +6,8 @@ Este repositório contém um projeto independente para disponibilizar a WRB-TV n
 
 - Worker exclusivo: `wrbtv-iphone-pwa-20261016-3858215c`.
 - Interface e arquivos estáticos servidos somente de `public/`.
-- A API e o proxy de mídia são encaminhados pelo Worker para a implementação em `netlify/functions/api.mjs`, que usa a API padrão Request/Response compatível com Workers.
+- A API e o proxy de mídia são executados diretamente pelo Worker deste projeto usando `netlify/functions/api.mjs`. Os códigos 0022/PFAST usam os pools e as tentativas de User-Agent do aplicativo Android, sem encaminhar o login para outro Worker.
+- O proxy HLS acompanha redirecionamentos manualmente e normaliza URLs de streams com IPv4 público usando `sslip.io`, conforme o servidor local do Android.
 - O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
 - O workflow de deploy é manual (`workflow_dispatch`) para evitar implantação acidental antes da configuração das credenciais.
 
@@ -34,7 +35,7 @@ O workflow de validação automática checa a sintaxe da API e do service worker
 ## Estrutura de hospedagem
 
 - `public/`: somente os arquivos públicos da PWA.
-- `src/index.js`: roteia chamadas `/api` para a API e todo o restante para os assets deste Worker.
+- `src/index.js`: executa a API do próprio projeto e serve os assets; não encaminha login ou reprodução a outro Worker.
 - `wrangler.jsonc`: define nome exclusivo e diretório público.
 - `.github/workflows/deploy-cloudflare.yml`: publicação manual isolada.
 - `netlify/functions/api.mjs`: lógica de API reutilizada, mantida como código-fonte do projeto.
