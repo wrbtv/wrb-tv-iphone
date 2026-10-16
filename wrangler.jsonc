@@ -22,14 +22,6 @@
       }
     ]
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": [
-        "WRBTViPhoneNodeContainer"
-      ]
-    }
-  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -41,5 +33,11 @@
     ],
     "not_found_handling": "single-page-application"
   },
-  "workers_dev": true
+  "workers_dev": true,
+  "exports": {
+    "WRBTViPhoneNodeContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
 }
