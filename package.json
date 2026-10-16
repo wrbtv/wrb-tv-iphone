@@ -1,7 +1,13 @@
 {
   "name": "wrbtv-iphone-pwa",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "WRB-TV PWA for iPhone Safari; Cloudflare Worker API, media proxy and iPhone PWA"
+  "description": "WRB-TV iPhone PWA with a dedicated Node.js container for Xtream API and HLS proxy",
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.37.0"
+  }
 }
