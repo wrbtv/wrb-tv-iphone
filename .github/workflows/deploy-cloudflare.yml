@@ -1,0 +1,44 @@
+name: Deploy WRB-TV iPhone to Cloudflare Workers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out WRB-TV iPhone only
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Worker source
+        run: |
+          node --check src/index.js
+          node --check netlify/functions/api.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
+          const manifest = JSON.parse(fs.readFileSync('public/manifest.webmanifest', 'utf8'));
+          if (config.name !== 'wrbtv-iphone-pwa-20261016') throw new Error('Unexpected Worker name');
+          if (config.assets?.directory !== './public') throw new Error('Unexpected assets directory');
+          if (!manifest.icons?.length) throw new Error('PWA manifest has no icons');
+          if (!fs.existsSync('public/index.html') || !fs.existsSync('public/sw.js') || !fs.existsSync('public/icon.png')) {
+            throw new Error('One or more public PWA assets are missing');
+          }
+          console.log('Cloudflare Worker configuration and PWA assets validated.');
+          NODE
+
+      - name: Deploy new isolated Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

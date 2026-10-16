@@ -3,5 +3,5 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "WRB-TV PWA for iPhone Safari; serverless API and HLS stream proxy hosted by Netlify"
+  "description": "WRB-TV PWA for iPhone Safari; Cloudflare Worker API, media proxy and iPhone PWA"
 }

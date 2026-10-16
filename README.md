@@ -1,33 +1,40 @@
-# WRB-TV iPhone (PWA)
+# WRB-TV iPhone (Cloudflare Worker + PWA)
 
-Esta é uma versão web instalável do WRB-TV, baseada na interface do aplicativo Android e adaptada para Safari/iPhone. É independente dos arquivos Android e não exige publicação na App Store nem cadastro no Apple Developer Program.
+Este repositório contém um projeto independente para disponibilizar a WRB-TV no iPhone como Progressive Web App (PWA). O app é instalado pelo Safari em **Compartilhar → Adicionar à Tela de Início**. Não é um IPA nativo e não exige publicação na App Store.
 
-## Como instalar no iPhone
+## Arquitetura isolada
 
-1. Publique esta pasta como um site HTTPS no Netlify.
-2. Abra a URL publicada no Safari do iPhone.
-3. Toque em **Compartilhar** > **Adicionar à Tela de Início**.
-4. Deixe **Abrir como App da Web** ativado, se essa opção aparecer, e toque em **Adicionar**.
+- Worker exclusivo: `wrbtv-iphone-pwa-20261016`.
+- Interface e arquivos estáticos servidos somente de `public/`.
+- A API e o proxy de mídia são encaminhados pelo Worker para a implementação em `netlify/functions/api.mjs`, que usa a API padrão Request/Response compatível com Workers.
+- O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
+- O workflow de deploy é manual (`workflow_dispatch`) para evitar implantação acidental antes da configuração das credenciais.
 
-O ícone WRB-TV aparecerá na tela inicial e abrirá em modo de aplicativo web.
+## Publicação na Cloudflare
 
-## Publicação no Netlify
+1. No GitHub, abra **Settings → Secrets and variables → Actions** deste repositório.
+2. Cadastre os secrets `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` para uma conta Cloudflare onde você tenha permissão para criar Workers.
+3. O token precisa ter permissões de implantação de Workers e leitura de conta conforme exigido pela Cloudflare.
+4. Abra **Actions → Deploy WRB-TV iPhone to Cloudflare Workers → Run workflow**.
+5. Após a execução bem-sucedida, o Wrangler informará a URL `workers.dev` do Worker independente. Abra essa URL no Safari do iPhone e escolha **Compartilhar → Adicionar à Tela de Início**.
 
-Esta branch contém apenas os arquivos da versão iPhone na raiz. Importe a branch `iphone-pwa` como um novo site Netlify e use o diretório raiz como base. O arquivo `netlify.toml` configura o site estático e a função serverless `netlify/functions/api.mjs`.
+**Segurança:** não coloque tokens no código, no README, nos issues ou nesta conversa. Use somente os secrets do GitHub. O workflow é manual e não roda deploy até ser iniciado após o cadastro dos secrets.
 
-A função implementa:
-- API JSON de autenticação, categorias, filmes e séries;
-- suporte aos códigos de servidor 0022 e PFAST e à lista de servidores alternativos;
-- proxy same-origin para streams, incluindo reescrita dos caminhos em playlists HLS.
+## Verificações
+
+O workflow de validação automática checa a sintaxe da API e do service worker, o manifesto e os metadados de instalação. O workflow de deploy realiza validações adicionais antes de executar o Wrangler.
 
 ## Limitações do iOS
 
-- Esta versão é uma PWA, não um IPA nativo. Não há instalação de executável nem publicação na App Store.
-- O iOS pode bloquear reprodução automática de áudio/vídeo até o toque do usuário. O player continua mostrando a interface e permite iniciar a reprodução.
-- A reprodução depende do formato do conteúdo e da compatibilidade do stream com Safari/iOS.
-- A sessão é mantida no `localStorage` do mesmo domínio; mudar de domínio cria uma origem nova e requer login novamente.
-- O backend de mídia precisa ficar publicado no mesmo domínio do app para o proxy `/api/stream` funcionar.
+- Trata-se de uma PWA, não de um aplicativo iOS nativo.
+- O iOS pode exigir toque do usuário antes de iniciar áudio ou vídeo.
+- A reprodução depende do suporte do Safari/iOS aos formatos dos fluxos.
+- A sessão é armazenada no `localStorage` dessa origem HTTPS; mudar de domínio pode exigir novo login.
 
-## Privacidade
+## Estrutura de hospedagem
 
-As credenciais IPTV são enviadas à função serverless apenas para autenticar no provedor informado e são armazenadas no armazenamento local do navegador do usuário. Não há um sistema de contas WRB-TV adicional nesta PWA. Use somente credenciais e listas que você está autorizado a acessar.
+- `public/`: somente os arquivos públicos da PWA.
+- `src/index.js`: roteia chamadas `/api` para a API e todo o restante para os assets deste Worker.
+- `wrangler.jsonc`: define nome exclusivo e diretório público.
+- `.github/workflows/deploy-cloudflare.yml`: publicação manual isolada.
+- `netlify/functions/api.mjs`: lógica de API reutilizada, mantida como código-fonte do projeto.
