@@ -85,7 +85,7 @@ jobs:
           if (!fs.existsSync('Dockerfile')) throw new Error('Node.js Container Dockerfile missing');
           if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Original Container must remain for rollback');
           const v2Container = config.containers?.find(c => c.name === 'wrbtv-iphone-node-backend-v2' && c.scheduling_policy === 'durable_object' && c.images?.base?.dockerfile === './Dockerfile');
-if (!v2Container || v2Container.class_name) throw new Error('V2 Container must use a single explicit linkage through exports.<class>.container');
+          if (!v2Container || v2Container.class_name) throw new Error('V2 Container must use a single explicit linkage through exports.<class>.container');
           if (config.exports?.WRBTViPhoneNodeContainerV2?.container !== v2Container.name) throw new Error('V2 Container application is not assigned to the Durable Object namespace');
           if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER' && b.class_name === 'WRBTViPhoneNodeContainer')) throw new Error('Original Container binding must remain for rollback');
           if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2' && b.class_name === 'WRBTViPhoneNodeContainerV2')) throw new Error('Replacement Container binding missing');
