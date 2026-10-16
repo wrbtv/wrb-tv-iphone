@@ -31,6 +31,8 @@ jobs:
           if (config.assets?.directory !== './public') throw new Error('Unexpected assets directory');
           if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Dedicated Node.js Container missing');
           if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER')) throw new Error('Container Durable Object binding missing');
+          if (config.migrations) throw new Error('Do not mix exports and migrations');
+          if (config.exports?.WRBTViPhoneNodeContainer?.type !== 'durable-object' || config.exports?.WRBTViPhoneNodeContainer?.storage !== 'sqlite') throw new Error('Container Durable Object export missing');
           if (!fs.existsSync('app/server.mjs') || !fs.existsSync('Dockerfile')) throw new Error('Node.js backend files missing');
           if (!manifest.icons?.length) throw new Error('PWA manifest has no icons');
           if (!fs.existsSync('public/index.html') || !fs.existsSync('public/sw.js') || !fs.existsSync('public/icon.png')) {
