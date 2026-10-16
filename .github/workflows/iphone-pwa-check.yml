@@ -37,7 +37,10 @@ jobs:
           if (manifest.name !== 'WRB-TV' || !manifest.icons?.length) throw new Error('PWA manifest invalid');
           if (!html.includes('apple-mobile-web-app-capable')) throw new Error('iOS install metadata missing');
           if (!html.includes('/manifest.webmanifest')) throw new Error('Manifest link missing');
+          if (!html.includes('class="login-hero-logo" src="/icon.png"') || !html.includes('<h1>WRB-TV</h1>')) throw new Error('Official WRB-TV logo/title missing from login');
           if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
+          if (!api.includes('"https://rekgol.top"') || !api.includes('"https://wrb-tv.top"')) throw new Error('HTTPS upstream fallback missing');
+          if (!api.includes('O servidor de IPTV em') || !api.includes('HTTP 403')) throw new Error('Friendly upstream 403 diagnosis missing');
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
           if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
