@@ -10,8 +10,8 @@ Este repositório contém um projeto independente para disponibilizar a WRB-TV n
 - O Node.js usa `netlify/functions/api.mjs` para a autenticação Xtream e o proxy de mídia, com os pools 0022/PFAST e as tentativas de User-Agent do Android.
 - O proxy HLS acompanha redirecionamentos manualmente e normaliza URLs de streams com IPv4 público usando `sslip.io`, conforme o servidor local do Android.
 - Esta implantação cria um novo Container apenas para a WRB-TV iPhone; não usa nem reconfigura `wrb-tv-smart-gateway`, o Windows ou o Android.
-- O Durable Object do Container é declarado em `exports` com armazenamento SQLite; a configuração não mistura `exports` com `migrations`.
-- A alteração para `exports` segue a migração oficial de configuração antiga da Cloudflare e mantém o namespace existente; não remove nem renomeia o Container.
+- O Container original e a classe antiga são mantidos para rollback. A requisição de produção é encaminhada a uma segunda aplicação de Container, com novo nome e novo namespace Durable Object, usando a política `durable_object` recomendada na documentação atual.
+- Ambas as classes Durable Object são declaradas em `exports` com armazenamento SQLite; a configuração não mistura `exports` com `migrations`.
 - O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
 - O workflow de deploy é manual (`workflow_dispatch`) para evitar implantação acidental antes da configuração das credenciais.
 
@@ -39,7 +39,7 @@ O workflow de validação automática checa a sintaxe da API e do service worker
 ## Estrutura de hospedagem
 
 - `public/`: somente os arquivos públicos da PWA.
-- `src/index.js`: roteia API e mídia para o Node.js Container deste mesmo Worker e serve os assets estáticos.
+- `src/index.js`: encaminha API e mídia para a nova aplicação Node.js Container V2 do projeto iPhone; a aplicação original permanece declarada para rollback.
 - `wrangler.jsonc`: define nome exclusivo e diretório público.
 - `.github/workflows/deploy-cloudflare.yml`: publicação manual isolada.
 - `netlify/functions/api.mjs`: lógica de API reutilizada, mantida como código-fonte do projeto.
