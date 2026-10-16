@@ -4,7 +4,7 @@ Este repositório contém um projeto independente para disponibilizar a WRB-TV n
 
 ## Arquitetura isolada
 
-- Worker exclusivo: `wrbtv-iphone-pwa-20261016`.
+- Worker exclusivo: `wrbtv-iphone-pwa-20261016-3858215c`.
 - Interface e arquivos estáticos servidos somente de `public/`.
 - A API e o proxy de mídia são encaminhados pelo Worker para a implementação em `netlify/functions/api.mjs`, que usa a API padrão Request/Response compatível com Workers.
 - O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
@@ -14,8 +14,8 @@ Este repositório contém um projeto independente para disponibilizar a WRB-TV n
 
 1. No GitHub, abra **Settings → Secrets and variables → Actions** deste repositório.
 2. Cadastre os secrets `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` para uma conta Cloudflare onde você tenha permissão para criar Workers.
-3. O token precisa ter permissões de implantação de Workers e leitura de conta conforme exigido pela Cloudflare.
-4. Abra **Actions → Deploy WRB-TV iPhone to Cloudflare Workers → Run workflow**.
+3. O token precisa permitir consultar Workers e criar/implantar Workers. O workflow verifica as credenciais e consulta o nome reservado antes do deploy; se encontrar um Worker com esse nome ou não conseguir confirmar sua inexistência, ele aborta para evitar substituir qualquer projeto.
+4. Abra **Actions → Deploy WRB-TV iPhone to Cloudflare Workers → Run workflow**. O workflow confirma por API que o nome do Worker não existe antes de publicar e aborta se já existir ou se não conseguir verificar.
 5. Após a execução bem-sucedida, o Wrangler informará a URL `workers.dev` do Worker independente. Abra essa URL no Safari do iPhone e escolha **Compartilhar → Adicionar à Tela de Início**.
 
 **Segurança:** não coloque tokens no código, no README, nos issues ou nesta conversa. Use somente os secrets do GitHub. O workflow é manual e não roda deploy até ser iniciado após o cadastro dos secrets.
