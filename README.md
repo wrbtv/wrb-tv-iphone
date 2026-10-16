@@ -1,33 +1,46 @@
 # WRB-TV iPhone (Cloudflare Worker + PWA)
 
-Este repositório contém um projeto independente para disponibilizar a WRB-TV no iPhone como Progressive Web App (PWA). O app é instalado pelo Safari em **Compartilhar → Adicionar à Tela de Início**. Não é um IPA nativo e não exige publicação na App Store.
+Este repositório contém o projeto independente da WRB-TV para iPhone como Progressive Web App (PWA). No Safari, a instalação é feita por **Compartilhar → Adicionar à Tela de Início**. Não é um IPA nativo e não exige publicação na App Store.
 
-## Arquitetura isolada
+## Arquitetura isolada e sem Containers
 
 - Worker exclusivo: `wrbtv-iphone-pwa-20261016-3858215c`.
-- Interface e arquivos estáticos servidos somente de `public/`.
-- A API e o proxy de mídia rodam em um **Node.js Container exclusivo deste projeto iPhone**. O Worker só encaminha `/api`, `/stream` e `/health` a esse processo; os arquivos da interface continuam em `public/`.
-- O Node.js usa `netlify/functions/api.mjs` para a autenticação Xtream e o proxy de mídia, com os pools 0022/PFAST e as tentativas de User-Agent do Android.
-- O proxy HLS acompanha redirecionamentos manualmente e normaliza URLs de streams com IPv4 público usando `sslip.io`, conforme o servidor local do Android.
-- Esta implantação cria um novo Container apenas para a WRB-TV iPhone; não usa nem reconfigura `wrb-tv-smart-gateway`, o Windows ou o Android.
-- O Container original e a classe antiga são mantidos para rollback. A requisição de produção é encaminhada a uma segunda aplicação de Container, com novo nome e novo namespace Durable Object, usando a política `durable_object` recomendada na documentação atual.
-- Ambas as classes Durable Object são declaradas em `exports` com armazenamento SQLite; a configuração não mistura `exports` com `migrations`.
-- O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
-- O workflow de deploy é manual (`workflow_dispatch`) para evitar implantação acidental antes da configuração das credenciais.
+- Interface e arquivos estáticos servidos de `public/`.
+- A API Xtream e o proxy HLS são executados diretamente dentro de `src/index.js`, chamando `netlify/functions/api.mjs`. O código de API usa as APIs Web `Request`, `Response`, `fetch`, `URL` e `AbortController`, suportadas pelo runtime Workers.
+- O fluxo do aplicativo não chama outro Worker nem acessa os projetos Windows, Android, `wrbtv-smart-gateway` ou `r-contemporaneo`.
+- A rota `/health` informa se o Worker está respondendo. As rotas `/api`, `/api/*` e `/stream` executam a API dentro do mesmo Worker.
+- Não há entrada `containers` no `wrangler.jsonc`. A publicação desta versão não exige a permissão account-wide `Workers Containers Write`.
+- Os nomes das duas classes Durable Object e suas declarações SQLite existentes permanecem no bundle para evitar apagar namespaces existentes durante esta mudança. Não são chamadas pelo fluxo HTTP. As associações de Container não são usadas.
+- `Dockerfile` e `app/server.mjs` permanecem no repositório como arquivos de referência; eles não fazem parte da execução publicada dessa arquitetura.
 
-## Publicação na Cloudflare
+## Permissões do token de publicação
 
-1. No GitHub, abra **Settings → Secrets and variables → Actions** deste repositório.
-2. Cadastre os secrets `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID` para uma conta Cloudflare onde você tenha permissão para criar Workers.
-3. O token precisa permitir consultar Workers e criar/implantar Workers. O workflow verifica as credenciais e consulta o nome reservado antes do deploy; se encontrar um Worker com esse nome ou não conseguir confirmar sua inexistência, ele aborta para evitar substituir qualquer projeto.
-4. Abra **Actions → Deploy WRB-TV iPhone to Cloudflare Workers → Run workflow**. O workflow confirma por API que o nome do Worker não existe antes de publicar e aborta se já existir ou se não conseguir verificar.
-5. Após a execução bem-sucedida, o Wrangler informará a URL `workers.dev` do Worker independente. Abra essa URL no Safari do iPhone e escolha **Compartilhar → Adicionar à Tela de Início**.
+Use um API Token com papel **Workers Editor** limitado ao Worker existente `wrbtv-iphone-pwa-20261016-3858215c`. Não adicione `Workers Containers Write`, pois essa permissão é account-scoped e concederia escrita em outros Containers da conta.
 
-**Segurança:** não coloque tokens no código, no README, nos issues ou nesta conversa. Use somente os secrets do GitHub. O workflow é manual e não roda deploy até ser iniciado após o cadastro dos secrets.
+O workflow verifica a presença das credenciais e confirma que o Worker específico existe antes de publicar. Se não puder confirmar o alvo, ele aborta.
+
+Cadastre em **GitHub → Settings → Secrets and variables → Actions**:
+
+- `CLOUDFLARE_API_TOKEN`: token limitado ao Worker acima.
+- `CLOUDFLARE_ACCOUNT_ID`: Account ID da conta Cloudflare usada pelo projeto.
+
+Não coloque tokens no código, no README, nos issues ou nesta conversa.
+
+## Publicação
+
+O workflow de publicação é iniciado em **Actions → Deploy WRB-TV iPhone to Cloudflare Workers → Run workflow**. Alterações relevantes ao código também acionam o workflow, que aborta com segurança se as credenciais não existirem.
 
 ## Verificações
 
-O workflow de validação automática checa a sintaxe da API e do service worker, o manifesto e os metadados de instalação. O workflow de deploy realiza validações adicionais antes de executar o Wrangler.
+O workflow de validação executa:
+
+- Sintaxe da API e do Worker.
+- `wrangler deploy --dry-run` para validar o bundle.
+- Smoke tests do handler da API: OPTIONS/CORS, método inválido e JSON inválido.
+- Integridade do manifesto e dos assets PWA.
+- Verificações explícitas de que o Worker não usa Container e de que as declarações existentes dos Durable Objects são preservadas.
+
+A validação automatizada não substitui a confirmação do deploy real e o teste de `/health` e do login em produção.
 
 ## Limitações do iOS
 
@@ -35,11 +48,3 @@ O workflow de validação automática checa a sintaxe da API e do service worker
 - O iOS pode exigir toque do usuário antes de iniciar áudio ou vídeo.
 - A reprodução depende do suporte do Safari/iOS aos formatos dos fluxos.
 - A sessão é armazenada no `localStorage` dessa origem HTTPS; mudar de domínio pode exigir novo login.
-
-## Estrutura de hospedagem
-
-- `public/`: somente os arquivos públicos da PWA.
-- `src/index.js`: encaminha API e mídia para a nova aplicação Node.js Container V2 do projeto iPhone; a aplicação original permanece declarada para rollback.
-- `wrangler.jsonc`: define nome exclusivo e diretório público.
-- `.github/workflows/deploy-cloudflare.yml`: publicação manual isolada.
-- `netlify/functions/api.mjs`: lógica de API reutilizada, mantida como código-fonte do projeto.

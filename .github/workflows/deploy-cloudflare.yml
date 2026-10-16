@@ -7,10 +7,8 @@ on:
     paths:
       - 'wrangler.jsonc'
       - 'src/**'
-      - 'app/**'
       - 'netlify/functions/api.mjs'
       - 'public/**'
-      - 'Dockerfile'
       - 'package.json'
       - '.github/workflows/deploy-cloudflare.yml'
 
@@ -29,31 +27,30 @@ jobs:
         with:
           node-version: 22
 
-      - name: Validate Worker source
+      - name: Validate direct Worker API configuration
         run: |
           node --check src/index.js
-          node --check app/server.mjs
           node --check netlify/functions/api.mjs
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
           const manifest = JSON.parse(fs.readFileSync('public/manifest.webmanifest', 'utf8'));
+          const worker = fs.readFileSync('src/index.js', 'utf8');
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected Worker name');
           if (config.assets?.directory !== './public') throw new Error('Unexpected assets directory');
-          if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Original Container for rollback missing');
-          const v2Container = config.containers?.find(c => c.name === 'wrbtv-iphone-node-backend-v2' && c.scheduling_policy === 'durable_object' && c.images?.base?.dockerfile === './Dockerfile');
-          if (!v2Container || v2Container.class_name) throw new Error('V2 Container must use a single explicit linkage through exports.<class>.container');
-          if (config.exports?.WRBTViPhoneNodeContainerV2?.container !== v2Container.name) throw new Error('V2 Container application is not assigned to the Durable Object namespace');
-          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2')) throw new Error('Replacement Container binding missing');
-          if (config.migrations) throw new Error('Do not mix exports and migrations');
-          if (config.exports?.WRBTViPhoneNodeContainer?.type !== 'durable-object' || config.exports?.WRBTViPhoneNodeContainer?.storage !== 'sqlite') throw new Error('Original Container Durable Object export missing');
-          if (config.exports?.WRBTViPhoneNodeContainerV2?.type !== 'durable-object' || config.exports?.WRBTViPhoneNodeContainerV2?.storage !== 'sqlite') throw new Error('Replacement Container Durable Object export missing');
-          if (!fs.existsSync('app/server.mjs') || !fs.existsSync('Dockerfile')) throw new Error('Node.js backend files missing');
-          if (!manifest.icons?.length) throw new Error('PWA manifest has no icons');
-          if (!fs.existsSync('public/index.html') || !fs.existsSync('public/sw.js') || !fs.existsSync('public/icon.png')) {
-            throw new Error('One or more public PWA assets are missing');
+          if (config.containers) throw new Error('No account-wide Containers permission may be required');
+          if (!worker.includes('return api(request)')) throw new Error('API must run directly inside the Worker');
+          if (!worker.includes('url.pathname === "/health"')) throw new Error('Worker health route missing');
+          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER' && b.class_name === 'WRBTViPhoneNodeContainer')) throw new Error('Preserve original DO binding');
+          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2' && b.class_name === 'WRBTViPhoneNodeContainerV2')) throw new Error('Preserve V2 DO binding');
+          for (const name of ['WRBTViPhoneNodeContainer','WRBTViPhoneNodeContainerV2']) {
+            if (config.exports?.[name]?.type !== 'durable-object' || config.exports?.[name]?.storage !== 'sqlite') throw new Error('Preserve existing DO namespace ' + name);
           }
-          console.log('Cloudflare Worker configuration and PWA assets validated.');
+          if (config.exports?.WRBTViPhoneNodeContainerV2?.container) throw new Error('Remove Container app association from V2 configuration');
+          if (!manifest.icons?.length) throw new Error('PWA manifest has no icons');
+          for (const path of ['public/index.html', 'public/sw.js', 'public/icon.png']) {
+            if (!fs.existsSync(path)) throw new Error('Missing public PWA asset: ' + path);
+          }
           NODE
 
       - name: Verify Cloudflare credentials are configured
@@ -62,11 +59,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error title=Cloudflare credentials missing::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as Actions secrets in this repository. No Cloudflare deployment was attempted."
+            echo "::error title=Cloudflare credentials missing::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as Actions secrets. No Cloudflare deployment was attempted."
             exit 1
           fi
 
-      - name: Confirm the target is the dedicated iPhone Worker
+      - name: Confirm the scoped target is the existing iPhone Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -78,16 +75,18 @@ jobs:
             --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             --header "Content-Type: application/json" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$worker_name" || true)"
-          if [ "$http_code" = "404" ]; then
-            echo "Dedicated iPhone Worker does not exist yet; deployment will create it."
-          elif [ "$http_code" = "200" ]; then
-            echo "Dedicated iPhone Worker exists and is the exact target configured by this repository; only this named Worker will be updated."
+          if [ "$http_code" = "200" ]; then
+            echo "Specified existing iPhone Worker verified. Only this Worker will be updated."
+          elif [ "$http_code" = "404" ]; then
+            echo "::error title=Specified iPhone Worker not found::The scoped token can update only the existing iPhone Worker. Aborting without deployment."
+            exit 1
           else
             echo "::error title=Could not verify target Worker::Cloudflare returned HTTP $http_code. Aborting without deployment to protect existing projects."
+            cat "$response_file"
             exit 1
           fi
 
-      - name: Deploy new isolated Worker
+      - name: Deploy only the existing iPhone Worker
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

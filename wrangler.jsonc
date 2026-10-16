@@ -6,23 +6,6 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "containers": [
-    {
-      "class_name": "WRBTViPhoneNodeContainer",
-      "image": "./Dockerfile",
-      "instance_type": "basic",
-      "max_instances": 3
-    },
-    {
-      "name": "wrbtv-iphone-node-backend-v2",
-      "scheduling_policy": "durable_object",
-      "images": {
-        "base": {
-          "dockerfile": "./Dockerfile"
-        }
-      }
-    }
-  ],
   "durable_objects": {
     "bindings": [
       {
@@ -54,8 +37,7 @@
     },
     "WRBTViPhoneNodeContainerV2": {
       "type": "durable-object",
-      "storage": "sqlite",
-      "container": "wrbtv-iphone-node-backend-v2"
+      "storage": "sqlite"
     }
   }
 }

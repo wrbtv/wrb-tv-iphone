@@ -17,46 +17,47 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Check serverless API syntax
-        run: node --check netlify/functions/api.mjs
-      - name: Check service worker syntax
-        run: node --check sw.js
+
+      - name: Check API and service worker syntax
+        run: |
+          node --check netlify/functions/api.mjs
+          node --check sw.js
+          node --check src/index.js
+          node --check public/sw.js
+
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
 
       - name: Validate Worker bundle with Wrangler dry run
         run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
 
-      - name: Check Worker entry point
-        run: node --check src/index.js
-      - name: Check Node.js Container server
-        run: node --check app/server.mjs
-      - name: Check public service worker
-        run: node --check public/sw.js
-      - name: Smoke test Node.js Container API server
+      - name: Smoke test the API directly in the Worker-compatible runtime
         run: |
-          set -eu
-          node app/server.mjs >/tmp/wrbtv-iphone-node.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          attempt=0
-          until curl --fail --silent http://127.0.0.1:3000/health >/tmp/wrbtv-iphone-health.json; do
-            attempt=$((attempt + 1))
-            if [ "$attempt" -ge 10 ]; then
-              cat /tmp/wrbtv-iphone-node.log
-              exit 1
-            fi
-            sleep 1
-          done
           node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const health = JSON.parse(fs.readFileSync('/tmp/wrbtv-iphone-health.json', 'utf8'));
-          if (health.ok !== true || health.runtime !== 'nodejs-container' || health.service !== 'wrbtv-iphone-node-backend') {
-            throw new Error('Node.js Container health check response invalid');
-          }
-          console.log('Node.js Container HTTP health check passed.');
+          import api from './netlify/functions/api.mjs';
+
+          const options = await api(new Request('https://iphone.example/api', {
+            method: 'OPTIONS'
+          }));
+          if (options.status !== 204) throw new Error('OPTIONS should return HTTP 204');
+          if (options.headers.get('access-control-allow-origin') !== '*') throw new Error('CORS header missing');
+
+          const getWithoutStreamUrl = await api(new Request('https://iphone.example/api', {
+            method: 'GET'
+          }));
+          if (getWithoutStreamUrl.status !== 405) throw new Error('Unexpected GET API response');
+
+          const invalidJson = await api(new Request('https://iphone.example/api', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{'
+          }));
+          if (invalidJson.status !== 400) throw new Error('Invalid JSON should return HTTP 400');
+
+          console.log('API OPTIONS, method rejection, and JSON error handling passed.');
           NODE
-      - name: Validate PWA assets and Cloudflare deployment guard
+
+      - name: Validate isolated Worker, PWA assets and scoped-deploy guard
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -66,40 +67,39 @@ jobs:
           const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
           const deploy = fs.readFileSync('.github/workflows/deploy-cloudflare.yml', 'utf8');
           const worker = fs.readFileSync('src/index.js', 'utf8');
-          const nodeServer = fs.readFileSync('app/server.mjs', 'utf8');
+
           if (manifest.name !== 'WRB-TV' || !manifest.icons?.length) throw new Error('PWA manifest invalid');
           if (!html.includes('apple-mobile-web-app-capable')) throw new Error('iOS install metadata missing');
           if (!html.includes('/manifest.webmanifest')) throw new Error('Manifest link missing');
           if (!html.includes('class="login-hero-logo" src="/icon.png"') || !html.includes('<h1>WRB-TV</h1>')) throw new Error('Official WRB-TV logo/title missing from login');
           if (!html.includes('id="wrbtvFullscreenLogin"') || !html.includes('Adicionar à Tela de Início')) throw new Error('Fullscreen control or iPhone install guidance missing');
           if (!html.includes('wrbtv-screen-controls-visible') || !html.includes("window.addEventListener('pointermove'") || !html.includes("window.addEventListener('pointerdown'")) throw new Error('Fullscreen auto-hide interaction missing');
+
           if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
           if (!api.includes('"0022": ["http://rekgol.top", "http://aptxu.com"]') || !api.includes('"PFAST": ["http://wrb-tv.top", "http://p1fast.com"]')) throw new Error('Server pools do not match Android/Windows');
-          if (!api.includes('HTTP 403')) throw new Error('Upstream 403 handling missing');
-          if (!api.includes('IPTVSmartersPro')) throw new Error('Missing IPTV app User-Agent fallback');
-          if (!api.includes('function ipToDomain') || !api.includes('sslip.io') || !api.includes('redirect: "manual"')) throw new Error('Android-style stream redirects/IP normalization missing');
-          if (worker.includes('GATEWAY_ORIGINS') || worker.includes('forwardRemoteApi') || worker.includes('forwardStream')) throw new Error('iPhone API must not be routed through another Worker');
-          if (!worker.includes('WRBTV_IPHONE_CONTAINER_V2.getByName("iphone-main")') || !worker.includes('WRBTViPhoneNodeContainerV2 extends DurableObject')) throw new Error('Replacement Durable Object Container is not used by the Worker');
-          if (!worker.includes('container.start({') || !worker.includes('container.getTcpPort(3000)') || !worker.includes('startAndWaitForPort')) throw new Error('Container startup/readiness proxy logic missing');
-          if (!nodeServer.includes('nodejs-container') || !nodeServer.includes('api(request)')) throw new Error('Container backend does not serve the project API');
-          if (!fs.existsSync('Dockerfile')) throw new Error('Node.js Container Dockerfile missing');
-          if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Original Container must remain for rollback');
-          const v2Container = config.containers?.find(c => c.name === 'wrbtv-iphone-node-backend-v2' && c.scheduling_policy === 'durable_object' && c.images?.base?.dockerfile === './Dockerfile');
-          if (!v2Container || v2Container.class_name) throw new Error('V2 Container must use a single explicit linkage through exports.<class>.container');
-          if (config.exports?.WRBTViPhoneNodeContainerV2?.container !== v2Container.name) throw new Error('V2 Container application is not assigned to the Durable Object namespace');
-          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER' && b.class_name === 'WRBTViPhoneNodeContainer')) throw new Error('Original Container binding must remain for rollback');
-          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2' && b.class_name === 'WRBTViPhoneNodeContainerV2')) throw new Error('Replacement Container binding missing');
-          if (config.migrations) throw new Error('Do not combine Durable Object exports and migrations');
-          for (const name of ['WRBTViPhoneNodeContainer','WRBTViPhoneNodeContainerV2']) {
-            if (config.exports?.[name]?.type !== 'durable-object' || config.exports?.[name]?.storage !== 'sqlite') throw new Error('Container Durable Object export is missing for ' + name);
-          }
-          if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
+          if (!api.includes('IPTVSmartersPro') || !api.includes('sslip.io') || !api.includes('redirect: "manual"')) throw new Error('Stream proxy compatibility features missing');
+          if (/^\s*import\s/m.test(api)) throw new Error('API should not depend on external/Node-only imports');
+
+          if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected Worker name');
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
-          if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
-          if (!deploy.includes('workers/scripts/$worker_name')) throw new Error('Existing Worker preflight missing');
-          if (!deploy.includes('Could not verify target Worker') || !deploy.includes('Aborting without deployment')) throw new Error('Deployment safety abort missing');
+          if (config.containers) throw new Error('This deployment must not require account-wide Workers Containers permission');
+          if (worker.includes('@cloudflare/containers') || worker.includes('container.start(') || worker.includes('getTcpPort')) throw new Error('Worker request path must not depend on a Container');
+          if (!worker.includes('return api(request)')) throw new Error('API is not executed directly by the Worker');
+          if (!worker.includes('url.pathname === "/health"')) throw new Error('Worker health endpoint missing');
+
+          // Preserve existing Durable Object declarations without deleting namespaces.
+          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER' && b.class_name === 'WRBTViPhoneNodeContainer')) throw new Error('Original Durable Object binding must be preserved');
+          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2' && b.class_name === 'WRBTViPhoneNodeContainerV2')) throw new Error('V2 Durable Object binding must be preserved');
+          for (const name of ['WRBTViPhoneNodeContainer','WRBTViPhoneNodeContainerV2']) {
+            if (config.exports?.[name]?.type !== 'durable-object' || config.exports?.[name]?.storage !== 'sqlite') throw new Error('Existing Durable Object namespace must remain declared: ' + name);
+          }
+          if (config.exports?.WRBTViPhoneNodeContainerV2?.container) throw new Error('V2 namespace must not require a linked Container app');
+
+          if (!deploy.includes('workflow_dispatch:')) throw new Error('Manual deployment trigger missing');
+          if (!deploy.includes('workers/scripts/$worker_name')) throw new Error('Target Worker preflight missing');
+          if (!deploy.includes('Specified existing iPhone Worker') || !deploy.includes('Aborting without deployment')) throw new Error('Scoped Worker safety guard missing');
           for (const path of ['public/index.html', 'public/sw.js', 'public/icon.png']) {
             if (!fs.existsSync(path)) throw new Error('Missing public asset: ' + path);
           }
-          console.log('Cloudflare Worker, safe deploy guard and PWA assets validated.');
+          console.log('Worker API, scope safeguards, DO namespace preservation and PWA assets validated.');
           NODE
