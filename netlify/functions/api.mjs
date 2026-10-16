@@ -42,37 +42,55 @@ async function fetchWithUserAgentFallback(url, options = {}) {
   throw lastError || new Error("Tempo esgotado ao conectar ao servidor.");
 }
 
+function isBlockedMediaHost(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  return (
+    host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
+    host === "metadata.google.internal" ||
+    host === "::1" || host === "::" || host.startsWith("fc") || host.startsWith("fd") ||
+    host.startsWith("fe80:") ||
+    (ipv4 && (
+      Number(ipv4[1]) === 0 || Number(ipv4[1]) === 10 ||
+      Number(ipv4[1]) === 127 || Number(ipv4[1]) >= 224 ||
+      (Number(ipv4[1]) === 169 && Number(ipv4[2]) === 254) ||
+      (Number(ipv4[1]) === 172 && Number(ipv4[2]) >= 16 && Number(ipv4[2]) <= 31) ||
+      (Number(ipv4[1]) === 192 && Number(ipv4[2]) === 168)
+    ))
+  );
+}
+
+// Match the Android local_server.dart behavior for providers that redirect
+// streams to a raw public IPv4 address. Cloudflare rejects some direct-IP
+// fetches, so route public addresses via sslip.io while still blocking private IPs.
+function ipToDomain(value) {
+  try {
+    const url = value instanceof URL ? new URL(value.toString()) : new URL(value);
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname)) {
+      url.hostname = url.hostname + ".sslip.io";
+    }
+    return url.toString();
+  } catch (_) {
+    return String(value || "");
+  }
+}
+
 async function proxyStreamRequest(req, rawTarget) {
   try {
     const requestUrl = new URL(req.url);
-    const targetUrl = new URL(rawTarget);
-    if (!["http:", "https:"].includes(targetUrl.protocol) || !targetUrl.hostname) {
+    let currentUrl = new URL(rawTarget);
+    if (!["http:", "https:"].includes(currentUrl.protocol) || !currentUrl.hostname) {
       return new Response("URL de mídia inválida.", { status: 400 });
     }
-    // This is a public streaming endpoint. Block obvious loopback, private and cloud-metadata targets.
-    const host = targetUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (
-      host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-      host === "metadata.google.internal" ||
-      host === "::1" || host === "::" || host.startsWith("fc") || host.startsWith("fd") ||
-      host.startsWith("fe80:") ||
-      (ipv4 && (
-        Number(ipv4[1]) === 0 || Number(ipv4[1]) === 10 ||
-        Number(ipv4[1]) === 127 || Number(ipv4[1]) >= 224 ||
-        (Number(ipv4[1]) === 169 && Number(ipv4[2]) === 254) ||
-        (Number(ipv4[1]) === 172 && Number(ipv4[2]) >= 16 && Number(ipv4[2]) <= 31) ||
-        (Number(ipv4[1]) === 192 && Number(ipv4[2]) === 168)
-      ))
-    ) {
-      return new Response("Destino de mídia não permitido.", { status: 400 });
-    }
-    if (targetUrl.origin === requestUrl.origin && targetUrl.pathname.startsWith("/api/stream")) {
+    if (currentUrl.origin === requestUrl.origin && currentUrl.pathname.startsWith("/api/stream")) {
       return new Response("Destino de proxy inválido.", { status: 400 });
     }
+    if (isBlockedMediaHost(currentUrl.hostname)) {
+      return new Response("Destino de mídia não permitido.", { status: 400 });
+    }
+    currentUrl = new URL(ipToDomain(currentUrl.toString()));
 
     const requestHeaders = new Headers({
-      "user-agent": "VLC/3.0.18 LibVLC/3.0.18",
       "accept": "*/*"
     });
     const range = req.headers.get("range");
@@ -80,14 +98,40 @@ async function proxyStreamRequest(req, rawTarget) {
     const ifRange = req.headers.get("if-range");
     if (ifRange) requestHeaders.set("if-range", ifRange);
 
-    const upstream = await fetchWithUserAgentFallback(targetUrl.toString(), {
-      method: req.method === "HEAD" ? "HEAD" : "GET",
-      headers: requestHeaders,
-      redirect: "follow"
-    });
+    let upstream = null;
+    // Like Android, follow redirects manually so every new host is normalized
+    // (public IP -> sslip.io) and revalidated before connecting.
+    for (let hop = 0; hop < 6; hop++) {
+      if (isBlockedMediaHost(currentUrl.hostname)) {
+        return new Response("Redirecionamento para destino de mídia não permitido.", { status: 400 });
+      }
+      upstream = await fetchWithUserAgentFallback(currentUrl.toString(), {
+        method: req.method === "HEAD" ? "HEAD" : "GET",
+        headers: requestHeaders,
+        redirect: "manual"
+      });
+      const location = upstream.headers.get("location");
+      if (upstream.status >= 300 && upstream.status < 400 && location) {
+        const nextUrl = new URL(location, currentUrl);
+        if (!["http:", "https:"].includes(nextUrl.protocol)) {
+          return new Response("Protocolo de redirecionamento não permitido.", { status: 400 });
+        }
+        if (isBlockedMediaHost(nextUrl.hostname)) {
+          return new Response("Redirecionamento para destino de mídia não permitido.", { status: 400 });
+        }
+        currentUrl = new URL(ipToDomain(nextUrl.toString()));
+        try { await upstream.body?.cancel(); } catch (_) {}
+        continue;
+      }
+      break;
+    }
+
+    if (!upstream) {
+      return new Response("Falha ao obter resposta do servidor de mídia.", { status: 502 });
+    }
 
     const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-    const isPlaylistUrl = /\.(m3u8?|m3u)(?:$|[?#])/i.test(targetUrl.toString());
+    const isPlaylistUrl = /\.(m3u8?|m3u)(?:$|[?#])/i.test(currentUrl.toString());
     const isPlaylistType = contentType.includes("mpegurl") || contentType.includes("vnd.apple");
     const headers = new Headers({
       "access-control-allow-origin": "*",
@@ -96,7 +140,7 @@ async function proxyStreamRequest(req, rawTarget) {
       "access-control-expose-headers": "Accept-Ranges, Content-Range, Content-Length",
       "cache-control": "no-store"
     });
-    for (const name of ["content-type", "accept-ranges", "content-range", "last-modified", "etag"]) {
+    for (const name of ["content-type", "content-length", "accept-ranges", "content-range", "last-modified", "etag"]) {
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
     }
@@ -104,13 +148,14 @@ async function proxyStreamRequest(req, rawTarget) {
     if (req.method !== "HEAD" && (isPlaylistUrl || isPlaylistType)) {
       const playlistBody = await upstream.text();
       if (playlistBody.trimStart().startsWith("#EXTM3U")) {
-        const resolvedBase = upstream.url || targetUrl.toString();
+        const resolvedBase = currentUrl.toString();
         const wrapReference = (reference) => {
           try {
             const absolute = new URL(reference, resolvedBase);
-            if (!["http:", "https:"].includes(absolute.protocol)) return reference;
+            if (!["http:", "https:"].includes(absolute.protocol) || isBlockedMediaHost(absolute.hostname)) return reference;
+            const normalized = ipToDomain(absolute.toString());
             const proxied = new URL("/api/stream", requestUrl.origin);
-            proxied.searchParams.set("url", absolute.toString());
+            proxied.searchParams.set("url", normalized);
             return proxied.toString();
           } catch (_) {
             return reference;
@@ -127,10 +172,17 @@ async function proxyStreamRequest(req, rawTarget) {
           return leading + wrapReference(trimmed) + trailing;
         }).join("\n");
         headers.set("content-type", "application/vnd.apple.mpegurl; charset=utf-8");
+        headers.delete("content-length");
         return new Response(rewritten, { status: upstream.status, headers });
       }
       headers.set("content-type", contentType || "application/octet-stream");
       return new Response(playlistBody, { status: upstream.status, headers });
+    }
+
+    if (!headers.has("content-type")) {
+      if (/\.ts(?:$|\?)/i.test(currentUrl.toString())) headers.set("content-type", "video/mp2t");
+      else if (/\.mp4(?:$|\?)/i.test(currentUrl.toString())) headers.set("content-type", "video/mp4");
+      else headers.set("content-type", "application/octet-stream");
     }
 
     return new Response(req.method === "HEAD" ? null : upstream.body, {
