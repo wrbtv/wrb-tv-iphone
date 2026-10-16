@@ -135,8 +135,9 @@ export default async (req) => {
 
   try {
     const serverPools = {
-      "0022": ["http://rekgol.top", "http://aptxu.com"],
-      "PFAST": ["http://wrb-tv.top", "http://p1fast.com"]
+      // Prefer HTTPS when the provider supports it, then retain the original HTTP fallback.
+      "0022": ["https://rekgol.top", "http://rekgol.top", "https://aptxu.com", "http://aptxu.com"],
+      "PFAST": ["https://wrb-tv.top", "http://wrb-tv.top", "https://p1fast.com", "http://p1fast.com"]
     };
     const rawServer = String(b.server || b.serverCode || "").trim();
     const serverCode = String(b.serverCode || rawServer).trim().toUpperCase();
@@ -199,7 +200,9 @@ export default async (req) => {
             headers: { "user-agent": "IPTVSmartersPro/1.0.0", "accept": "application/json" }
           });
           if (!authR.ok) {
-            lastNetworkError = `Servidor respondeu HTTP ${authR.status} ao validar o acesso.`;
+            lastNetworkError = authR.status === 403
+              ? `O servidor de IPTV em ${new URL(candidate).hostname} recusou a requisição (HTTP 403). O backend da WRB-TV está respondendo, mas o provedor recusou o acesso. Confira o servidor/código e as credenciais, ou se o provedor bloqueia conexões originadas na Cloudflare.`
+              : `Servidor respondeu HTTP ${authR.status} ao validar o acesso.`;
             continue;
           }
           hadReachableServer = true;
