@@ -3319,6 +3319,24 @@
     .wrbtv-screen-mode-button svg,
     .wrbtv-screen-mode-app svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .wrbtv-screen-mode-app { display: inline-flex; align-items: center; justify-content:center; }
+    /* Premium controls stay hidden until the user taps or moves the pointer. */
+    .wrbtv-screen-mode-button,
+    .wrbtv-screen-mode-app {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      transform: translateY(-7px);
+      transition: opacity .18s ease, visibility .18s ease, transform .18s ease;
+    }
+    body.wrbtv-screen-controls-visible .wrbtv-screen-mode-button,
+    body.wrbtv-screen-controls-visible .wrbtv-screen-mode-app,
+    .wrbtv-screen-mode-button:focus-visible,
+    .wrbtv-screen-mode-app:focus-visible {
+      opacity: 1 !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+      transform: translateY(0);
+    }
     body.login-mode .wrbtv-screen-mode-app { display: none !important; }
     body:not(.login-mode) #wrbtvFullscreenLogin { display: none !important; }
     .wrbtv-screen-mode-button:focus-visible,
@@ -6106,6 +6124,20 @@
         window.matchMedia?.('(display-mode: standalone)').matches ||
         window.matchMedia?.('(display-mode: fullscreen)').matches
       );
+      const CONTROL_IDLE_MS = 2400;
+      let hideControlsTimer = null;
+
+      function revealControls() {
+        document.body.classList.add('wrbtv-screen-controls-visible');
+        if (hideControlsTimer) clearTimeout(hideControlsTimer);
+        hideControlsTimer = setTimeout(() => {
+          // Keep controls visible while the user is keyboard-focused on them,
+          // and while the instructional sheet is open.
+          if (hint && !hint.hidden) return;
+          if (document.activeElement?.matches?.('.wrbtv-screen-mode-button, .wrbtv-screen-mode-app')) return;
+          document.body.classList.remove('wrbtv-screen-controls-visible');
+        }, CONTROL_IDLE_MS);
+      }
 
       function showHint(title, message) {
         if (!hint || !hintTitle || !hintText) return;
@@ -6168,10 +6200,25 @@
         }
       }
 
-      buttons.forEach(button => button.addEventListener('click', toggleFullscreen));
-      hintOk?.addEventListener('click', () => { hint.hidden = true; });
-      document.addEventListener('fullscreenchange', syncButtons);
-      document.addEventListener('webkitfullscreenchange', syncButtons);
+      buttons.forEach(button => button.addEventListener('click', async () => {
+        revealControls();
+        await toggleFullscreen();
+        revealControls();
+      }));
+      hintOk?.addEventListener('click', () => {
+        hint.hidden = true;
+        revealControls();
+      });
+
+      // Mouse movement on computers and taps/presses on touch screens wake the controls.
+      window.addEventListener('pointermove', event => {
+        if (event.pointerType === 'mouse') revealControls();
+      }, { passive: true });
+      window.addEventListener('pointerdown', revealControls, { passive: true });
+      window.addEventListener('touchstart', revealControls, { passive: true });
+      window.addEventListener('keydown', revealControls);
+      document.addEventListener('fullscreenchange', () => { syncButtons(); revealControls(); });
+      document.addEventListener('webkitfullscreenchange', () => { syncButtons(); revealControls(); });
       window.addEventListener('pageshow', syncButtons);
       syncButtons();
     })();
