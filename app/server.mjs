@@ -27,7 +27,7 @@ function collectBody(req) {
 }
 
 function makeRequest(req, body) {
-  const host = req.headers.host || "localhost";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
   const proto = req.headers["x-forwarded-proto"] || "http";
   const url = new URL(req.url || "/", `${proto}://${host}`);
   const headers = new Headers();
