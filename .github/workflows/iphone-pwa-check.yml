@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, iphone-pwa]
   pull_request:
-    branches: [iphone-pwa]
+    branches: [main, iphone-pwa]
 
 permissions:
   contents: read
