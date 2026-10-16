@@ -15,7 +15,6 @@
     },
     {
       "name": "wrbtv-iphone-node-backend-v2",
-      "class_name": "WRBTViPhoneNodeContainerV2",
       "scheduling_policy": "durable_object",
       "images": {
         "base": {
@@ -55,7 +54,8 @@
     },
     "WRBTViPhoneNodeContainerV2": {
       "type": "durable-object",
-      "storage": "sqlite"
+      "storage": "sqlite",
+      "container": "wrbtv-iphone-node-backend-v2"
     }
   }
 }

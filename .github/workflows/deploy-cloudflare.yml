@@ -30,7 +30,9 @@ jobs:
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected Worker name');
           if (config.assets?.directory !== './public') throw new Error('Unexpected assets directory');
           if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Original Container for rollback missing');
-          if (!config.containers?.some(c => c.name === 'wrbtv-iphone-node-backend-v2' && c.class_name === 'WRBTViPhoneNodeContainerV2' && c.scheduling_policy === 'durable_object' && c.images?.base?.dockerfile === './Dockerfile')) throw new Error('Replacement Durable Object Container missing');
+          const v2Container = config.containers?.find(c => c.name === 'wrbtv-iphone-node-backend-v2' && c.scheduling_policy === 'durable_object' && c.images?.base?.dockerfile === './Dockerfile');
+if (!v2Container || v2Container.class_name) throw new Error('V2 Container must use a single explicit linkage through exports.<class>.container');
+if (config.exports?.WRBTViPhoneNodeContainerV2?.container !== v2Container.name) throw new Error('V2 Container application is not assigned to the Durable Object namespace');
           if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER_V2')) throw new Error('Replacement Container binding missing');
           if (config.migrations) throw new Error('Do not mix exports and migrations');
           if (config.exports?.WRBTViPhoneNodeContainer?.type !== 'durable-object' || config.exports?.WRBTViPhoneNodeContainer?.storage !== 'sqlite') throw new Error('Original Container Durable Object export missing');
