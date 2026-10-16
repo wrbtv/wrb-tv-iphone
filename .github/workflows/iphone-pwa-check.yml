@@ -59,7 +59,7 @@ jobs:
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
           if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
           if (!deploy.includes('workers/scripts/$worker_name')) throw new Error('Existing Worker preflight missing');
-          if (!deploy.includes('already exists') || !deploy.includes('Aborting')) throw new Error('Deployment safety abort missing');
+          if (!deploy.includes('Could not verify target Worker') || !deploy.includes('Aborting without deployment')) throw new Error('Deployment safety abort missing');
           for (const path of ['public/index.html', 'public/sw.js', 'public/icon.png']) {
             if (!fs.existsSync(path)) throw new Error('Missing public asset: ' + path);
           }
