@@ -1,50 +1,61 @@
 import api from "../netlify/functions/api.mjs";
 
+// The Cloudflare Container gateway is the Node.js backend used by the
+// working Windows application. Use the account's exact workers.dev hostname first.
 const GATEWAY_ORIGINS = [
-  // Match the gateway origin already used by the working Windows version first.
-  "https://wrb-tv-smart-gateway.wrbtv-official22.workers.dev",
-  // Alternate account subdomain as shown in the current Cloudflare dashboard.
-  "https://wrb-tv-smart-gateway.wrbtv-oficial22.workers.dev"
+  "https://wrb-tv-smart-gateway.wrbtv-oficial22.workers.dev",
+  "https://wrb-tv-smart-gateway.wrbtv-official22.workers.dev"
 ];
 const REMOTE_CODES = new Set(["0022", "PFAST"]);
 
-function shouldTryAlternateGateway(response) {
-  return response.status === 403 || response.status === 404 || response.status >= 500;
+function isJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  return contentType.toLowerCase().includes("json");
 }
 
-async function fetchGateway(path, init) {
-  let lastResponse = null;
-  let meaningfulResponse = null;
-  let lastError = null;
+async function fetchGatewayJson(path, init) {
+  let lastStatus = 502;
+  let lastIssue = "O gateway Node.js não retornou uma resposta JSON válida.";
 
   for (const origin of GATEWAY_ORIGINS) {
     try {
       const response = await fetch(origin + path, init);
-      lastResponse = response;
+      lastStatus = response.status;
 
-      // Remember useful error bodies and don't let an alternate-host 404
-      // hide a more informative error returned by the gateway.
-      if (response.status !== 404) meaningfulResponse = response;
-      if (!shouldTryAlternateGateway(response)) return response;
-    } catch (error) {
-      lastError = error;
+      // A stale/incorrect workers.dev hostname can return a Cloudflare HTML error
+      // (including 403). Never pass that HTML to the app as if it were API JSON.
+      if (!isJsonResponse(response)) {
+        lastIssue = "O endereço do gateway respondeu com uma página de erro em vez de JSON.";
+        continue;
+      }
+
+      // API errors from the Node.js gateway are JSON and need to reach the app.
+      return response;
+    } catch (_) {
+      lastIssue = "Não foi possível alcançar este endereço do gateway.";
     }
   }
 
-  if (meaningfulResponse) return meaningfulResponse;
-  if (lastResponse) return lastResponse;
-  throw lastError || new Error("Gateway WRB-TV indisponível.");
+  return Response.json({
+    auth: false,
+    error: lastIssue + " Verifique a URL pública do gateway Node.js da WRB-TV."
+  }, {
+    status: 502,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store"
+    }
+  });
 }
 
-async function forwardRemoteApi(request, payload, code) {
+async function forwardRemoteApi(payload, code) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
-
   try {
-    // For the 0022/PFAST remote codes, always use the same gateway as Windows.
-    // Direct fallback from a Cloudflare Worker gets blocked by some IPTV hosts
-    // and was the reason the iPhone build differed from the working apps.
-    return await fetchGateway("/api", {
+    // 0022/PFAST must go through the persistent Node.js Container gateway.
+    // Do not fall back to direct upstream provider requests from this Worker:
+    // the provider returns HTTP 403 to direct Cloudflare-origin connections.
+    return await fetchGatewayJson("/api", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -57,13 +68,16 @@ async function forwardRemoteApi(request, payload, code) {
       }),
       signal: controller.signal
     });
-  } catch (error) {
+  } catch (_) {
     return Response.json({
       auth: false,
-      error: "Não foi possível acessar o gateway da WRB-TV. Verifique a disponibilidade do serviço e tente novamente."
+      error: "A chamada ao gateway Node.js da WRB-TV excedeu o tempo limite. Tente novamente."
     }, {
       status: 502,
-      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store"
+      }
     });
   } finally {
     clearTimeout(timeout);
@@ -77,9 +91,8 @@ async function forwardStream(request, url) {
     if (value) headers.set(name, value);
   }
 
-  let lastResponse = null;
-  let meaningfulResponse = null;
-  let lastError = null;
+  let lastStatus = 502;
+  let lastIssue = "O gateway Node.js não conseguiu abrir o fluxo de vídeo.";
 
   for (const origin of GATEWAY_ORIGINS) {
     try {
@@ -91,33 +104,38 @@ async function forwardStream(request, url) {
         redirect: "follow"
       });
 
-      lastResponse = response;
-      if (response.ok) return response;
+      // Streaming responses are binary or HLS text, not JSON. Accept successful
+      // responses, including 206 partial content for video seeking.
+      if (response.ok || response.status === 206) return response;
 
-      if (response.status !== 404) meaningfulResponse = response;
-      if (![403, 404].includes(response.status) && response.status < 500) return response;
-    } catch (error) {
-      lastError = error;
+      lastStatus = response.status;
+      lastIssue = "O gateway de mídia respondeu HTTP " + response.status + ".";
+      // Try the correct account hostname if the alternate hostname returns a
+      // Cloudflare page/error. Keep all 0022/PFAST streams on the Node gateway.
+      if (response.status === 403 || response.status === 404 || response.status >= 500) continue;
+      return response;
+    } catch (_) {
+      lastIssue = "Não foi possível conectar ao gateway de mídia da WRB-TV.";
     }
   }
 
-  // Do not retry these streams directly against the IPTV provider from this
-  // Worker: the production apps use the gateway for stream proxying too.
-  if (meaningfulResponse) return meaningfulResponse;
-  if (lastResponse) return lastResponse;
-
-  return new Response(
-    "Não foi possível acessar o gateway de mídia da WRB-TV. Tente novamente em instantes.",
-    { status: 502, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }
-  );
+  return new Response(lastIssue, {
+    status: lastStatus >= 400 ? lastStatus : 502,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "Content-Range, Content-Length, Accept-Ranges"
+    }
+  });
 }
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isApiPath = url.pathname === "/api" || url.pathname.startsWith("/api/");
-    const isStreamPath = (url.pathname === "/api/stream" || url.pathname === "/stream" ||
-      (url.pathname.startsWith("/api") && url.searchParams.has("url")));
+    const isStreamPath = url.pathname === "/api/stream" || url.pathname === "/stream" ||
+      (url.pathname.startsWith("/api") && url.searchParams.has("url"));
 
     if (isStreamPath && (request.method === "GET" || request.method === "HEAD") && url.searchParams.has("url")) {
       return forwardStream(request, url);
@@ -130,17 +148,15 @@ export default {
       } catch {
         return api(request);
       }
+
       const code = String(payload.serverCode || payload.server || "").trim().toUpperCase();
       if (REMOTE_CODES.has(code)) {
-        return forwardRemoteApi(request, payload, code);
+        return forwardRemoteApi(payload, code);
       }
       return api(request);
     }
 
-    if (isApiPath || request.method === "OPTIONS") {
-      return api(request);
-    }
-
+    if (isApiPath || request.method === "OPTIONS") return api(request);
     return env.ASSETS.fetch(request);
   }
 };
