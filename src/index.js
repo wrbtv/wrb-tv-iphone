@@ -24,7 +24,11 @@ export default {
     // by the persistent Node process. UI assets remain served by this Worker.
     if (isApiPath || isStreamPath || isHealthPath) {
       const backend = getContainer(env.WRBTV_IPHONE_CONTAINER, "wrbtv-iphone-node-backend");
-      return backend.fetch(request);
+      const forwardedHeaders = new Headers(request.headers);
+      forwardedHeaders.set("x-forwarded-host", url.host);
+      forwardedHeaders.set("x-forwarded-proto", url.protocol.replace(/:$/, ""));
+      const backendRequest = new Request(request, { headers: forwardedHeaders });
+      return backend.fetch(backendRequest);
     }
 
     return env.ASSETS.fetch(request);
