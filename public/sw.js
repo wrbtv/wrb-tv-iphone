@@ -1,4 +1,4 @@
-const CACHE_NAME = "wrbtv-iphone-shell-v4-node-gateway-host-fix";
+const CACHE_NAME = "wrbtv-iphone-shell-v5-direct-android-api";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.png"];
 
 self.addEventListener("install", (event) => {
