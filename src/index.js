@@ -1,17 +1,30 @@
-import api from "../netlify/functions/api.mjs";
+import { Container, getContainer } from "@cloudflare/containers";
+
+export class WRBTViPhoneNodeContainer extends Container {
+  defaultPort = 3000;
+  sleepAfter = "30m";
+  enableInternet = true;
+  pingEndpoint = "/health";
+
+  envVars = {
+    NODE_ENV: "production",
+    PORT: "3000"
+  };
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const isApiPath = url.pathname === "/api" || url.pathname.startsWith("/api/");
+    const isStreamPath = url.pathname === "/stream";
+    const isHealthPath = url.pathname === "/health";
 
-    // The iPhone PWA uses its own API implementation, based on the Android
-    // local_server.dart flow: the 0022/PFAST server pools, HTTP retries with
-    // alternate User-Agents, login/categories, and the HLS/media proxy all run
-    // through this project's own Worker. Do not route these codes to another
-    // Worker or reuse another project's gateway.
-    if (url.pathname === "/api" || url.pathname.startsWith("/api/") ||
-        url.pathname === "/stream" || request.method === "OPTIONS") {
-      return api(request);
+    // The Node.js Container belongs exclusively to the iPhone project.
+    // API calls, 0022/PFAST login, and media/playlist requests are handled
+    // by the persistent Node process. UI assets remain served by this Worker.
+    if (isApiPath || isStreamPath || isHealthPath) {
+      const backend = getContainer(env.WRBTV_IPHONE_CONTAINER, "wrbtv-iphone-node-backend");
+      return backend.fetch(request);
     }
 
     return env.ASSETS.fetch(request);
