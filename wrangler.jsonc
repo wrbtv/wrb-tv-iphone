@@ -1,6 +1,6 @@
 {
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
-  "name": "wrbtv-iphone-pwa-20261016",
+  "name": "wrbtv-iphone-pwa-20261016-3858215c",
   "main": "src/index.js",
   "compatibility_date": "2026-10-16",
   "assets": {
