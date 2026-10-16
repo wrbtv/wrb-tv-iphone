@@ -12,6 +12,16 @@
       "image": "./Dockerfile",
       "instance_type": "basic",
       "max_instances": 3
+    },
+    {
+      "name": "wrbtv-iphone-node-backend-v2",
+      "class_name": "WRBTViPhoneNodeContainerV2",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./Dockerfile"
+        }
+      }
     }
   ],
   "durable_objects": {
@@ -19,6 +29,10 @@
       {
         "name": "WRBTV_IPHONE_CONTAINER",
         "class_name": "WRBTViPhoneNodeContainer"
+      },
+      {
+        "name": "WRBTV_IPHONE_CONTAINER_V2",
+        "class_name": "WRBTViPhoneNodeContainerV2"
       }
     ]
   },
@@ -36,6 +50,10 @@
   "workers_dev": true,
   "exports": {
     "WRBTViPhoneNodeContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "WRBTViPhoneNodeContainerV2": {
       "type": "durable-object",
       "storage": "sqlite"
     }
