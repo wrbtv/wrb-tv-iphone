@@ -3,12 +3,41 @@
   "name": "wrbtv-iphone-pwa-20261016-3858215c",
   "main": "src/index.js",
   "compatibility_date": "2026-10-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "containers": [
+    {
+      "class_name": "WRBTViPhoneNodeContainer",
+      "image": "./Dockerfile",
+      "instance_type": "basic",
+      "max_instances": 3
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WRBTV_IPHONE_CONTAINER",
+        "class_name": "WRBTViPhoneNodeContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "WRBTViPhoneNodeContainer"
+      ]
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": [
       "/api",
-      "/api/*"
+      "/api/*",
+      "/stream",
+      "/health"
     ],
     "not_found_handling": "single-page-application"
   },
