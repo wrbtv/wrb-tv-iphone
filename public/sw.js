@@ -1,4 +1,4 @@
-const CACHE_NAME = "wrbtv-iphone-shell-v3-autohide-gateway-routing";
+const CACHE_NAME = "wrbtv-iphone-shell-v4-node-gateway-host-fix";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.png"];
 
 self.addEventListener("install", (event) => {
