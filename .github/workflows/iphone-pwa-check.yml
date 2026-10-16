@@ -27,6 +27,29 @@ jobs:
         run: node --check app/server.mjs
       - name: Check public service worker
         run: node --check public/sw.js
+      - name: Smoke test Node.js Container API server
+        run: |
+          set -eu
+          node app/server.mjs >/tmp/wrbtv-iphone-node.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          attempt=0
+          until curl --fail --silent http://127.0.0.1:3000/health >/tmp/wrbtv-iphone-health.json; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 10 ]; then
+              cat /tmp/wrbtv-iphone-node.log
+              exit 1
+            fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const health = JSON.parse(fs.readFileSync('/tmp/wrbtv-iphone-health.json', 'utf8'));
+          if (health.ok !== true || health.runtime !== 'nodejs-container' || health.service !== 'wrbtv-iphone-node-backend') {
+            throw new Error('Node.js Container health check response invalid');
+          }
+          console.log('Node.js Container HTTP health check passed.');
+          NODE
       - name: Validate PWA assets and Cloudflare deployment guard
         run: |
           node --input-type=module <<'NODE'
