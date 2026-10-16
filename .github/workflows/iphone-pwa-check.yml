@@ -40,10 +40,13 @@ jobs:
           if (!html.includes('/manifest.webmanifest')) throw new Error('Manifest link missing');
           if (!html.includes('class="login-hero-logo" src="/icon.png"') || !html.includes('<h1>WRB-TV</h1>')) throw new Error('Official WRB-TV logo/title missing from login');
           if (!html.includes('id="wrbtvFullscreenLogin"') || !html.includes('Adicionar à Tela de Início')) throw new Error('Fullscreen control or iPhone install guidance missing');
+          if (!html.includes('wrbtv-screen-controls-visible') || !html.includes("window.addEventListener('pointermove'") || !html.includes("window.addEventListener('pointerdown'")) throw new Error('Fullscreen auto-hide interaction missing');
           if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
           if (!api.includes('"0022": ["http://rekgol.top", "http://aptxu.com"]') || !api.includes('"PFAST": ["http://wrb-tv.top", "http://p1fast.com"]')) throw new Error('Server pools do not match Android/Windows');
           if (!api.includes('O servidor de IPTV em') || !api.includes('HTTP 403')) throw new Error('Friendly upstream 403 diagnosis missing');
-          if (!worker.includes('wrb-tv-smart-gateway.wrbtv-oficial22.workers.dev') || !worker.includes('forwardRemoteApi') || !worker.includes('forwardStream')) throw new Error('Existing gateway integration missing');
+          if (!worker.includes('wrb-tv-smart-gateway.wrbtv-official22.workers.dev') || !worker.includes('wrb-tv-smart-gateway.wrbtv-oficial22.workers.dev') || !worker.includes('forwardRemoteApi') || !worker.includes('forwardStream')) throw new Error('Existing gateway integration missing');
+          if (worker.indexOf('wrbtv-official22') > worker.indexOf('wrbtv-oficial22')) throw new Error('Working Windows gateway must be attempted first');
+          if (!worker.includes('Do not retry these streams directly against the IPTV provider')) throw new Error('Remote stream path must not bypass the gateway');
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
           if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
