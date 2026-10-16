@@ -21,6 +21,12 @@ jobs:
         run: node --check netlify/functions/api.mjs
       - name: Check service worker syntax
         run: node --check sw.js
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Worker bundle with Wrangler dry run
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+
       - name: Check Worker entry point
         run: node --check src/index.js
       - name: Check Node.js Container server
