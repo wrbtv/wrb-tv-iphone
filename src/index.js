@@ -76,9 +76,10 @@ async function forwardStream(request, url) {
       lastResponse = response;
       if (response.ok) return response;
       if (response.status === 404 || response.status >= 500) continue;
-      // Retry the local proxy for upstream 403/404/410 responses because its
-      // user-agent rotation may work with providers that reject the gateway UA.
-      if (![403, 404, 410].includes(response.status)) return response;
+      // On an upstream 403/410, fall back locally and rotate user agents.
+      // Do not overwrite the meaningful gateway response with a typo-host 404.
+      if ([403, 410].includes(response.status)) break;
+      return response;
     } catch (error) {
       lastError = error;
     }
