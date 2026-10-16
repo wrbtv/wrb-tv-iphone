@@ -21,18 +21,30 @@ jobs:
         run: node --check netlify/functions/api.mjs
       - name: Check service worker syntax
         run: node --check sw.js
-      - name: Validate manifest and PWA shell
+      - name: Check Worker entry point
+        run: node --check src/index.js
+      - name: Check public service worker
+        run: node --check public/sw.js
+      - name: Validate PWA assets and Cloudflare deployment guard
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const manifest = JSON.parse(fs.readFileSync('manifest.webmanifest', 'utf8'));
-          const html = fs.readFileSync('index.html', 'utf8');
+          const manifest = JSON.parse(fs.readFileSync('public/manifest.webmanifest', 'utf8'));
+          const html = fs.readFileSync('public/index.html', 'utf8');
           const api = fs.readFileSync('netlify/functions/api.mjs', 'utf8');
-          if (!manifest.name || manifest.name !== 'WRB-TV') throw new Error('Manifest name missing');
-          if (!manifest.icons?.length) throw new Error('Manifest icon missing');
-          if (!html.includes('apple-mobile-web-app-capable')) throw new Error('iOS home-screen meta missing');
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
+          const deploy = fs.readFileSync('.github/workflows/deploy-cloudflare.yml', 'utf8');
+          if (manifest.name !== 'WRB-TV' || !manifest.icons?.length) throw new Error('PWA manifest invalid');
+          if (!html.includes('apple-mobile-web-app-capable')) throw new Error('iOS install metadata missing');
           if (!html.includes('/manifest.webmanifest')) throw new Error('Manifest link missing');
-          if (!api.includes('proxyStreamRequest')) throw new Error('Stream proxy missing');
-          if (!api.includes('serverPools')) throw new Error('Server pool support missing');
-          console.log('PWA manifest, iOS install metadata, serverless API and stream proxy checks passed.');
+          if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
+          if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
+          if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
+          if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
+          if (!deploy.includes('workers/scripts/$worker_name')) throw new Error('Existing Worker preflight missing');
+          if (!deploy.includes('already exists') || !deploy.includes('Aborting')) throw new Error('Deployment safety abort missing');
+          for (const path of ['public/index.html', 'public/sw.js', 'public/icon.png']) {
+            if (!fs.existsSync(path)) throw new Error('Missing public asset: ' + path);
+          }
+          console.log('Cloudflare Worker, safe deploy guard and PWA assets validated.');
           NODE
