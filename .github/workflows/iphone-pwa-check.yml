@@ -23,6 +23,8 @@ jobs:
         run: node --check sw.js
       - name: Check Worker entry point
         run: node --check src/index.js
+      - name: Check Node.js Container server
+        run: node --check app/server.mjs
       - name: Check public service worker
         run: node --check public/sw.js
       - name: Validate PWA assets and Cloudflare deployment guard
@@ -35,6 +37,7 @@ jobs:
           const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
           const deploy = fs.readFileSync('.github/workflows/deploy-cloudflare.yml', 'utf8');
           const worker = fs.readFileSync('src/index.js', 'utf8');
+          const nodeServer = fs.readFileSync('app/server.mjs', 'utf8');
           if (manifest.name !== 'WRB-TV' || !manifest.icons?.length) throw new Error('PWA manifest invalid');
           if (!html.includes('apple-mobile-web-app-capable')) throw new Error('iOS install metadata missing');
           if (!html.includes('/manifest.webmanifest')) throw new Error('Manifest link missing');
@@ -47,7 +50,11 @@ jobs:
           if (!api.includes('IPTVSmartersPro')) throw new Error('Missing IPTV app User-Agent fallback');
           if (!api.includes('function ipToDomain') || !api.includes('sslip.io') || !api.includes('redirect: "manual"')) throw new Error('Android-style stream redirects/IP normalization missing');
           if (worker.includes('GATEWAY_ORIGINS') || worker.includes('forwardRemoteApi') || worker.includes('forwardStream')) throw new Error('iPhone API must not be routed through another Worker');
-          if (!worker.includes('return api(request)')) throw new Error('iPhone API requests are not routed to the dedicated local implementation');
+          if (!worker.includes('getContainer(env.WRBTV_IPHONE_CONTAINER') || !worker.includes('WRBTViPhoneNodeContainer')) throw new Error('Dedicated Node.js Container is not wired into the iPhone Worker');
+          if (!nodeServer.includes('nodejs-container') || !nodeServer.includes('api(request)')) throw new Error('Container backend does not serve the project API');
+          if (!fs.existsSync('Dockerfile')) throw new Error('Node.js Container Dockerfile missing');
+          if (!config.containers?.some(c => c.class_name === 'WRBTViPhoneNodeContainer' && c.image === './Dockerfile')) throw new Error('Dedicated Node.js Container is not configured');
+          if (!config.durable_objects?.bindings?.some(b => b.name === 'WRBTV_IPHONE_CONTAINER' && b.class_name === 'WRBTViPhoneNodeContainer')) throw new Error('Container binding missing');
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
           if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
