@@ -43,11 +43,11 @@ jobs:
           if (!html.includes('wrbtv-screen-controls-visible') || !html.includes("window.addEventListener('pointermove'") || !html.includes("window.addEventListener('pointerdown'")) throw new Error('Fullscreen auto-hide interaction missing');
           if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
           if (!api.includes('"0022": ["http://rekgol.top", "http://aptxu.com"]') || !api.includes('"PFAST": ["http://wrb-tv.top", "http://p1fast.com"]')) throw new Error('Server pools do not match Android/Windows');
-          if (!api.includes('O servidor de IPTV em') || !api.includes('HTTP 403')) throw new Error('Friendly upstream 403 diagnosis missing');
-          if (!worker.includes('wrb-tv-smart-gateway.wrbtv-oficial22.workers.dev') || !worker.includes('wrb-tv-smart-gateway.wrbtv-official22.workers.dev') || !worker.includes('fetchGatewayJson') || !worker.includes('forwardRemoteApi') || !worker.includes('forwardStream')) throw new Error('Persistent Node.js gateway integration missing');
-          if (worker.indexOf('wrbtv-oficial22') > worker.indexOf('wrbtv-official22')) throw new Error('Actual account workers.dev hostname must be tried first');
-          if (!worker.includes('Never pass that HTML to the app as if it were API JSON')) throw new Error('Gateway non-JSON response must be detected');
-          if (!worker.includes('Do not fall back to direct upstream provider requests from this Worker')) throw new Error('Remote codes must stay on the Node.js gateway');
+          if (!api.includes('HTTP 403')) throw new Error('Upstream 403 handling missing');
+          if (!api.includes('IPTVSmartersPro')) throw new Error('Missing IPTV app User-Agent fallback');
+          if (!api.includes('function ipToDomain') || !api.includes('sslip.io') || !api.includes('redirect: "manual"')) throw new Error('Android-style stream redirects/IP normalization missing');
+          if (worker.includes('GATEWAY_ORIGINS') || worker.includes('forwardRemoteApi') || worker.includes('forwardStream')) throw new Error('iPhone API must not be routed through another Worker');
+          if (!worker.includes('return api(request)')) throw new Error('iPhone API requests are not routed to the dedicated local implementation');
           if (config.name !== 'wrbtv-iphone-pwa-20261016-3858215c') throw new Error('Unexpected isolated Worker name');
           if (config.main !== 'src/index.js' || config.assets?.directory !== './public') throw new Error('Unexpected Worker paths');
           if (!deploy.includes('workflow_dispatch:')) throw new Error('Deployment must stay manually triggered');
