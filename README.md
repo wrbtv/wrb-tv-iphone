@@ -6,8 +6,10 @@ Este repositório contém um projeto independente para disponibilizar a WRB-TV n
 
 - Worker exclusivo: `wrbtv-iphone-pwa-20261016-3858215c`.
 - Interface e arquivos estáticos servidos somente de `public/`.
-- A API e o proxy de mídia são executados diretamente pelo Worker deste projeto usando `netlify/functions/api.mjs`. Os códigos 0022/PFAST usam os pools e as tentativas de User-Agent do aplicativo Android, sem encaminhar o login para outro Worker.
+- A API e o proxy de mídia rodam em um **Node.js Container exclusivo deste projeto iPhone**. O Worker só encaminha `/api`, `/stream` e `/health` a esse processo; os arquivos da interface continuam em `public/`.
+- O Node.js usa `netlify/functions/api.mjs` para a autenticação Xtream e o proxy de mídia, com os pools 0022/PFAST e as tentativas de User-Agent do Android.
 - O proxy HLS acompanha redirecionamentos manualmente e normaliza URLs de streams com IPv4 público usando `sslip.io`, conforme o servidor local do Android.
+- Esta implantação cria um novo Container apenas para a WRB-TV iPhone; não usa nem reconfigura `wrb-tv-smart-gateway`, o Windows ou o Android.
 - O deploy não usa nem altera outros Workers, Pages, domínios ou repositórios.
 - O workflow de deploy é manual (`workflow_dispatch`) para evitar implantação acidental antes da configuração das credenciais.
 
@@ -35,7 +37,7 @@ O workflow de validação automática checa a sintaxe da API e do service worker
 ## Estrutura de hospedagem
 
 - `public/`: somente os arquivos públicos da PWA.
-- `src/index.js`: executa a API do próprio projeto e serve os assets; não encaminha login ou reprodução a outro Worker.
+- `src/index.js`: roteia API e mídia para o Node.js Container deste mesmo Worker e serve os assets estáticos.
 - `wrangler.jsonc`: define nome exclusivo e diretório público.
 - `.github/workflows/deploy-cloudflare.yml`: publicação manual isolada.
 - `netlify/functions/api.mjs`: lógica de API reutilizada, mantida como código-fonte do projeto.
