@@ -1,3 +1,47 @@
+const UPSTREAM_USER_AGENTS = [
+  "IPTVSmartersPro/1.0.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+  "VLC/3.0.18 LibVLC/3.0.18"
+];
+
+async function fetchWithUserAgentFallback(url, options = {}) {
+  let lastResponse = null;
+  let lastError = null;
+
+  for (const userAgent of UPSTREAM_USER_AGENTS) {
+    const controller = new AbortController();
+    const upstreamSignal = options.signal;
+    const abortFromUpstream = () => controller.abort();
+    if (upstreamSignal?.aborted) controller.abort();
+    else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const headers = new Headers(options.headers || {});
+      headers.set("user-agent", userAgent);
+      if (!headers.has("accept")) headers.set("accept", "application/json, text/plain, */*");
+      if (!headers.has("accept-language")) headers.set("accept-language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7");
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        redirect: options.redirect || "follow",
+        signal: controller.signal
+      });
+      lastResponse = response;
+      if (response.ok || response.status !== 403) return response;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timeout);
+      upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+    }
+  }
+
+  if (lastResponse) return lastResponse;
+  throw lastError || new Error("Tempo esgotado ao conectar ao servidor.");
+}
+
 async function proxyStreamRequest(req, rawTarget) {
   try {
     const requestUrl = new URL(req.url);
@@ -36,7 +80,7 @@ async function proxyStreamRequest(req, rawTarget) {
     const ifRange = req.headers.get("if-range");
     if (ifRange) requestHeaders.set("if-range", ifRange);
 
-    const upstream = await fetch(targetUrl.toString(), {
+    const upstream = await fetchWithUserAgentFallback(targetUrl.toString(), {
       method: req.method === "HEAD" ? "HEAD" : "GET",
       headers: requestHeaders,
       redirect: "follow"
@@ -135,9 +179,8 @@ export default async (req) => {
 
   try {
     const serverPools = {
-      // Prefer HTTPS when the provider supports it, then retain the original HTTP fallback.
-      "0022": ["https://rekgol.top", "http://rekgol.top", "https://aptxu.com", "http://aptxu.com"],
-      "PFAST": ["https://wrb-tv.top", "http://wrb-tv.top", "https://p1fast.com", "http://p1fast.com"]
+      "0022": ["http://rekgol.top", "http://aptxu.com"],
+      "PFAST": ["http://wrb-tv.top", "http://p1fast.com"]
     };
     const rawServer = String(b.server || b.serverCode || "").trim();
     const serverCode = String(b.serverCode || rawServer).trim().toUpperCase();
@@ -166,12 +209,9 @@ export default async (req) => {
     async function fetchXtream(query) {
       if (!base) return [];
       const url = `${base}&${query}`;
-      const r = await fetch(url, {
+      const r = await fetchWithUserAgentFallback(url, {
         redirect: "follow",
-        headers: {
-          "user-agent": "IPTVSmartersPro/1.0.0",
-          "accept": "application/json"
-        }
+        headers: { "accept": "application/json, text/plain, */*" }
       });
       if (!r.ok) return [];
       try {
@@ -195,9 +235,9 @@ export default async (req) => {
         server = candidate;
         base = makeBase(server);
         try {
-          const authR = await fetch(base, {
+          const authR = await fetchWithUserAgentFallback(base, {
             redirect: "follow",
-            headers: { "user-agent": "IPTVSmartersPro/1.0.0", "accept": "application/json" }
+            headers: { "accept": "application/json, text/plain, */*" }
           });
           if (!authR.ok) {
             lastNetworkError = authR.status === 403
@@ -340,13 +380,10 @@ export default async (req) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout max
-        const r = await fetch(url, {
+        const r = await fetchWithUserAgentFallback(url, {
           signal: controller.signal,
           redirect: "follow",
-          headers: {
-            "user-agent": "IPTVSmartersPro/1.0.0",
-            "accept": "*/*"
-          }
+          headers: { "accept": "*/*" }
         });
         clearTimeout(timeoutId);
         if (!r.ok) return Response.json({ error: `O servidor respondeu HTTP ${r.status} ao solicitar a playlist.` }, { status: 502 });
