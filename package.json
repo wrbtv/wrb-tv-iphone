@@ -1,0 +1,7 @@
+{
+  "name": "wrbtv-iphone-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WRB-TV PWA for iPhone Safari; serverless API and HLS stream proxy hosted by Netlify"
+}
