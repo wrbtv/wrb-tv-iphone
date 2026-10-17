@@ -231,7 +231,7 @@ export default async (req) => {
 
   try {
     const serverPools = {
-      "0022": ["http://rekgol.top", "http://aptxu.com"],
+      "0022": ["http://brokuxt.top", "http://aptxu.com", "http://genialplay.net", "http://genialplay.eu"],
       "PFAST": ["http://wrb-tv.top", "http://p1fast.com"]
     };
     const rawServer = String(b.server || b.serverCode || "").trim();
