@@ -76,7 +76,7 @@ jobs:
           if (!html.includes('wrbtv-screen-controls-visible') || !html.includes("window.addEventListener('pointermove'") || !html.includes("window.addEventListener('pointerdown'")) throw new Error('Fullscreen auto-hide interaction missing');
 
           if (!api.includes('proxyStreamRequest') || !api.includes('serverPools')) throw new Error('API or stream proxy missing');
-          if (!api.includes('"0022": ["http://rekgol.top", "http://aptxu.com"]') || !api.includes('"PFAST": ["http://wrb-tv.top", "http://p1fast.com"]')) throw new Error('Server pools do not match Android/Windows');
+          if (!api.includes('"0022": ["http://brokuxt.top", "http://aptxu.com", "http://genialplay.net", "http://genialplay.eu"]') || !api.includes('"PFAST": ["http://wrb-tv.top", "http://p1fast.com"]')) throw new Error('Server pools do not match Android/Windows');
           if (!api.includes('IPTVSmartersPro') || !api.includes('sslip.io') || !api.includes('redirect: "manual"')) throw new Error('Stream proxy compatibility features missing');
           if (/^\s*import\s/m.test(api)) throw new Error('API should not depend on external/Node-only imports');
 
